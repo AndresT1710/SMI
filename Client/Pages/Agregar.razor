@@ -1,0 +1,227 @@
+﻿@page "/agregar"
+@page "/editar/{id:int}"
+
+@using SMI.Shared.Models
+@inject SMI.Client.Services.PersonaService personaService
+@inject SMI.Client.Services.ProfesionService profesionService
+@inject NavigationManager NavigationManager
+
+<h3>@(persona.id == 0 ? "Agregar Usuario" : "Editar Usuario")</h3>
+
+@if (!string.IsNullOrEmpty(mensajeError))
+{
+    <div class="alert alert-danger">@mensajeError</div>
+}
+@if (!string.IsNullOrEmpty(mensajeExito))
+{
+    <div class="alert alert-success">@mensajeExito</div>
+}
+
+<EditForm Model="persona" OnValidSubmit="GuardarUsuario">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label>Tipo de Documento:</label>
+        <InputSelect class="form-control" @bind-Value="id_TipoDocumento">
+            <option value="">-- Seleccione --</option>
+            @foreach (var tipo in tiposDocumento)
+            {
+                <option value="@tipo.id">@tipo.nombre</option>
+            }
+        </InputSelect>
+    </div>
+
+    <div class="form-group">
+        <label>Número de Documento:</label>
+        <InputText class="form-control" @bind-Value="numeroDocumento" />
+    </div>
+
+    <div class="form-group">
+        <label>Nombres:</label>
+        <InputText class="form-control" @bind-Value="persona.nombre" />
+    </div>
+
+    <div class="form-group">
+        <label>Apellidos:</label>
+        <InputText class="form-control" @bind-Value="persona.apellido" />
+    </div>
+
+    <div class="form-group">
+        <label>Fecha de Nacimiento:</label>
+        <InputDate class="form-control" @bind-Value="persona.FechaNacimiento" />
+    </div>
+
+    <div class="form-group">
+        <label>Género:</label>
+        <InputSelect class="form-control" @bind-Value="persona.id_Genero">
+            <option value="">-- Seleccione --</option>
+            <option value="1">Masculino</option>
+            <option value="2">Femenino</option>
+        </InputSelect>
+    </div>
+
+    <div class="form-group">
+        <label>Profesión:</label>
+        <InputSelect class="form-control" @bind-Value="id_Profesion" @onchange="OnProfesionChanged">
+            <option value="">-- Seleccione --</option>
+            @foreach (var profesion in profesiones)
+            {
+                <option value="@profesion.id">@profesion.nombre</option>
+            }
+        </InputSelect>
+    </div>
+
+    @if (id_Profesion == 1 || id_Profesion == 2)
+    {
+        <div class="form-group">
+            <label>Correo:</label>
+            <InputText class="form-control" @bind-Value="correo" />
+        </div>
+        <div class="form-group">
+            <label>Clave:</label>
+            <InputText class="form-control" type="password" @bind-Value="clave" />
+        </div>
+    }
+
+    <button class="btn btn-primary" type="submit">Guardar</button>
+    <button class="btn btn-secondary" @onclick="Volver">Cancelar</button>
+</EditForm>
+
+@code {
+    [Parameter]
+    public int? id { get; set; }
+
+    private Persona persona = new Persona();
+    private List<Profesion> profesiones = new();
+    private List<TipoDocumento> tiposDocumento = new();
+    private int id_TipoDocumento;
+    private string numeroDocumento;
+    private int id_Profesion;
+    private string correo;
+    private string clave;
+    private string claveExistente;
+    private string mensajeExito;
+    private string mensajeError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            tiposDocumento = await personaService.GetTiposDocumentoAsync();
+            profesiones = await profesionService.GetProfesionesAsync();
+
+            if (id.HasValue && id.Value > 0)
+            {
+                var lista = await personaService.GetUsuariosAsync();
+                var personaExistente = lista.FirstOrDefault(p => p.id == id.Value);
+
+                if (personaExistente != null)
+                {
+                    persona = personaExistente;
+                    id_Profesion = await personaService.GetProfesionPorPersonaIdAsync(persona.id);
+
+                    if (id_Profesion == 1 || id_Profesion == 2)
+                    {
+                        var usuario = await personaService.GetUsuarioPorPersonaIdAsync(persona.id);
+                        if (usuario != null)
+                        {
+                            correo = usuario.Correo;
+                            claveExistente = usuario.Clave; // Guardamos la clave actual
+                        }
+                    }
+                }
+                else
+                {
+                    mensajeError = "No se encontró la persona.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al cargar los datos: {ex.Message}";
+        }
+    }
+
+    private void OnProfesionChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int result))
+        {
+            id_Profesion = result;
+        }
+        else
+        {
+            id_Profesion = 0;
+        }
+    }
+
+    private async Task GuardarUsuario()
+    {
+        mensajeError = string.Empty;
+        mensajeExito = string.Empty;
+
+        if (id_TipoDocumento == 0 || string.IsNullOrWhiteSpace(numeroDocumento))
+        {
+            mensajeError = "Debe seleccionar un tipo de documento e ingresar el número";
+            return;
+        }
+
+        if (id_Profesion == 0)
+        {
+            mensajeError = "Debe seleccionar una profesión válida.";
+            return;
+        }
+
+        try
+        {
+            if (persona.id == 0)
+            {
+                // CREAR
+                if ((id_Profesion == 1 || id_Profesion == 2) && string.IsNullOrWhiteSpace(clave))
+                {
+                    mensajeError = "Debe ingresar una clave.";
+                    return;
+                }
+
+                if (id_Profesion == 1 || id_Profesion == 2)
+                {
+                    await personaService.CreateUsuarioYPersonaAsync(persona, id_Profesion, correo, clave);
+                }
+                else
+                {
+                    await personaService.CreateSoloPersonaAsync(persona, id_Profesion);
+                }
+				// Crear el usuario con documento
+                await personaService.CreatePersonaConDocumentoAsync(persona, id_TipoDocumento, numeroDocumento);
+
+                mensajeExito = "Usuario creado correctamente.";
+            }
+            else
+            {
+                // EDITAR
+                if (id_Profesion == 1 || id_Profesion == 2)
+                {
+                    string claveParaGuardar = string.IsNullOrWhiteSpace(clave) ? claveExistente : clave;
+                    await personaService.UpdateUsuarioYPersonaAsync(persona, id_Profesion, correo, claveParaGuardar);
+                }
+                else
+                {
+                    await personaService.UpdateSoloPersonaAsync(persona, id_Profesion);
+                }
+                mensajeExito = "Usuario actualizado correctamente.";
+            }
+
+            await Task.Delay(1500);
+            NavigationManager.NavigateTo("/usuarios");
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error al guardar: {ex.Message}";
+        }
+    }
+
+    private void Volver()
+    {
+        NavigationManager.NavigateTo("/usuarios");
+    }
+}

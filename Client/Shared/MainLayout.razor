@@ -1,0 +1,112 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject HttpClient Http
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 d-flex justify-content-end align-items-center">
+            @if (!string.IsNullOrWhiteSpace(UserNombre) || !string.IsNullOrWhiteSpace(UserApellido))
+            {
+                <div class="dropdown">
+                    <button class="btn btn-link dropdown-toggle" type="button"
+                            id="userDropdown" @onclick="ToggleDropdown">
+                        👤 @UserNombre @UserApellido
+                    </button>
+
+                    <!-- Menú desplegable -->
+                    <ul class="dropdown-menu dropdown-menu-end" @ref="dropdownMenu" aria-labelledby="userDropdown" style="display:@(isDropdownVisible ? "block" : "none")">
+                        <li>
+                            <a class="dropdown-item" @onclick="EditarUsuario">
+                                <span class="me-2">📝</span> Editar usuario
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" @onclick="CerrarSesion">
+                                <span class="me-2">🚪</span> Cerrar sesión
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            }
+            else
+            {
+                <a href="/">Iniciar sesión</a>
+            }
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    private string UserNombre = string.Empty;
+    private string UserApellido = string.Empty;
+    private bool _loaded = false;
+    private bool isDropdownVisible = false; // Variable para manejar la visibilidad del menú desplegable
+    private ElementReference dropdownMenu;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_loaded)
+        {
+            UserNombre = await JS.InvokeAsync<string>("localStorage.getItem", "userNombre") ?? "";
+            UserApellido = await JS.InvokeAsync<string>("localStorage.getItem", "userApellido") ?? "";
+
+            _loaded = true;
+            StateHasChanged(); // Vuelve a renderizar con los datos actualizados
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        isDropdownVisible = !isDropdownVisible; // Alterna la visibilidad del menú
+    }
+
+    private void EditarUsuario()
+    {
+        JS.InvokeVoidAsync("window.open", "/editar-usuario", "_blank");
+    }
+
+    private async Task CerrarSesion()
+    {
+        // Obtén el correo electrónico del localStorage
+        var userEmail = await JS.InvokeAsync<string>("localStorage.getItem", "userEmail");
+
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            Console.WriteLine("Error: el correo electrónico no está disponible.");
+            return;  // Salir si no hay un correo electrónico válido
+        }
+
+        var logoutDto = new LogoutDTO
+            {
+                Email = userEmail
+            };
+
+        // Realizar la solicitud POST al servidor
+        var response = await Http.PostAsJsonAsync("api/auth/logout", logoutDto);
+
+        if (response.IsSuccessStatusCode)
+        {
+            // Limpiar el localStorage
+            await JS.InvokeVoidAsync("localStorage.removeItem", "userNombre");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "userApellido");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "userEmail");
+
+            // Redirigir a la página de inicio
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            Console.WriteLine("Error al cerrar sesión.");
+        }
+    }
+
+}

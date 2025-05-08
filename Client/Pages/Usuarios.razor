@@ -1,0 +1,71 @@
+﻿@page "/usuarios"
+@inject SMI.Client.Services.PersonaService personaService
+@inject NavigationManager NavigationManager
+@using SMI.Shared.Models
+
+<h3>Lista de Usuarios</h3>
+
+@if (personas == null)
+{
+    <p><em>Cargando...</em></p>
+}
+else if (personas.Count == 0)
+{
+    <p>No hay usuarios registrados.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Genero</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var persona in personas)
+            {
+                <tr>
+                    <td>@persona.id</td>
+                    <td>@persona.nombre</td>
+                    <td>@persona.apellido</td>
+					<td>@(persona.id_Genero == 1 ? "Masculino" : "Femenino")</td>
+                    <td>
+                        <button class="btn btn-primary" @onclick="@(() => EditarUsuario(persona.id))">Editar</button>
+                        <button class="btn btn-danger" @onclick="@(() => EliminarUsuario(persona.id))">Eliminar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<button class="btn btn-success" @onclick="AgregarNuevoUsuario">Agregar Nuevo Usuario</button>
+
+@code {
+    private List<Persona> personas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        personas = await personaService.GetUsuariosAsync();
+    }
+
+    private async Task EliminarUsuario(int id)
+    {
+        await personaService.DeleteUsuarioAsync(id);
+        personas = await personaService.GetUsuariosAsync(); // refrescar lista
+    }
+
+    private void AgregarNuevoUsuario()
+    {
+        NavigationManager.NavigateTo("/agregar");
+    }
+
+    private void EditarUsuario(int id)
+    {
+        NavigationManager.NavigateTo($"/editar/{id}");
+    }
+}
